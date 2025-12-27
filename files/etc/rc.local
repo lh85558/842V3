@@ -1,58 +1,75 @@
 #!/bin/sh -e
-# Put your custom commands here that should be executed once
-# the system init finished. By default this file does nothing.
+# AR9531 64MB RAM 优化启动脚本
+# 针对低内存环境优化
 
 # 等待系统完全启动
 sleep 5
 
-# 启动CUPS服务
-if [ -f /etc/init.d/cupsd ]; then
-    /etc/init.d/cupsd enable
-    /etc/init.d/cupsd start
-    logger -t rc.local "CUPS service started"
-fi
+# 内存优化：清理缓存
+sync
+echo 3 > /proc/sys/vm/drop_caches
 
-# 设置USB打印机权限
-if [ -e /dev/usb/lp0 ]; then
-    chmod 666 /dev/usb/lp* 2>/dev/null
-    logger -t rc.local "USB printer permissions set"
-fi
+# 禁用不需要的服务以节省内存
+# IPv6服务（如不需要）
+# /etc/init.d/odhcpd stop
+# /etc/init.d/odhcpd disable
 
-# 启动网络打印服务P910nd
+# 启动P910nd（轻量级网络打印，优先使用）
 if [ -f /etc/init.d/p910nd ]; then
     /etc/init.d/p910nd enable
     /etc/init.d/p910nd start
-    logger -t rc.local "P910nd service started"
+    logger -t rc.local "P910nd service started (lightweight)"
 fi
 
-# 等待CUPS完全启动
-sleep 10
-
-# 自动检测并添加USB打印机
-if [ -x /usr/sbin/lpinfo ]; then
-    USB_PRINTER=$(/usr/sbin/lpinfo -v 2>/dev/null | grep -i "usb://HP" | head -n1 | awk '{print $1}')
-    
-    if [ -n "$USB_PRINTER" ]; then
-        # 检查打印机是否已添加
-        if ! /usr/sbin/lpstat -p HP-LaserJet >/dev/null 2>&1; then
-            logger -t rc.local "Adding HP LaserJet printer: $USB_PRINTER"
-            /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m everywhere 2>/dev/null || \
-            /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m drv:///sample.drv/generpcl.ppd 2>/dev/null
-            
-            # 设置为默认打印机
-            /usr/sbin/lpadmin -d HP-LaserJet 2>/dev/null
-            /usr/sbin/cupsenable HP-LaserJet 2>/dev/null
-            /usr/sbin/cupsaccept HP-LaserJet 2>/dev/null
-            
-            logger -t rc.local "HP LaserJet printer added successfully"
+# 启动CUPS服务（内存占用较大，按需启动）
+if [ -f /etc/init.d/cupsd ]; then
+    # 检查可用内存
+    FREE_MEM=$(free | grep Mem | awk '{print $4}')
+    if [ $FREE_MEM -gt 20000 ]; then
+        /etc/init.d/cupsd enable
+        /etc/init.d/cupsd start
+        logger -t rc.local "CUPS service started (free mem: ${FREE_MEM}KB)"
+        
+        # 等待CUPS完全启动
+        sleep 10
+        
+        # 设置USB打印机权限
+        if [ -e /dev/usb/lp0 ]; then
+            chmod 666 /dev/usb/lp* 2>/dev/null
+            logger -t rc.local "USB printer permissions set"
         fi
+        
+        # 自动检测并添加USB打印机
+        if [ -x /usr/sbin/lpinfo ]; then
+            USB_PRINTER=$(/usr/sbin/lpinfo -v 2>/dev/null | grep -i "usb://HP" | head -n1 | awk '{print $1}')
+            
+            if [ -n "$USB_PRINTER" ]; then
+                # 检查打印机是否已添加
+                if ! /usr/sbin/lpstat -p HP-LaserJet >/dev/null 2>&1; then
+                    logger -t rc.local "Adding HP LaserJet printer: $USB_PRINTER"
+                    /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m everywhere 2>/dev/null || \
+                    /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m drv:///sample.drv/generpcl.ppd 2>/dev/null
+                    
+                    # 设置为默认打印机
+                    /usr/sbin/lpadmin -d HP-LaserJet 2>/dev/null
+                    /usr/sbin/cupsenable HP-LaserJet 2>/dev/null
+                    /usr/sbin/cupsaccept HP-LaserJet 2>/dev/null
+                    
+                    logger -t rc.local "HP LaserJet printer added successfully"
+                fi
+            fi
+        fi
+    else
+        logger -t rc.local "Warning: Low memory (${FREE_MEM}KB), CUPS not started. Use P910nd instead."
     fi
 fi
 
 # 显示系统信息
-logger -t rc.local "THDN-PrintServer initialization completed"
+logger -t rc.local "THDN-PrintServer (AR9531) initialization completed"
 logger -t rc.local "LAN IP: 192.168.10.1"
 logger -t rc.local "WiFi SSID: THDN-dayin"
+logger -t rc.local "Free Memory: $(free -m | grep Mem | awk '{print $4}')MB"
 
 exit 0
+
 
