@@ -2,19 +2,57 @@
 # Put your custom commands here that should be executed once
 # the system init finished. By default this file does nothing.
 
+# 等待系统完全启动
+sleep 5
+
 # 启动CUPS服务
-/etc/init.d/cupsd enable
-/etc/init.d/cupsd start
+if [ -f /etc/init.d/cupsd ]; then
+    /etc/init.d/cupsd enable
+    /etc/init.d/cupsd start
+    logger -t rc.local "CUPS service started"
+fi
 
 # 设置USB打印机权限
-chmod 666 /dev/usb/lp* 2>/dev/null
+if [ -e /dev/usb/lp0 ]; then
+    chmod 666 /dev/usb/lp* 2>/dev/null
+    logger -t rc.local "USB printer permissions set"
+fi
 
-# 启动网络打印服务
-/etc/init.d/p910nd enable
-/etc/init.d/p910nd start
+# 启动网络打印服务P910nd
+if [ -f /etc/init.d/p910nd ]; then
+    /etc/init.d/p910nd enable
+    /etc/init.d/p910nd start
+    logger -t rc.local "P910nd service started"
+fi
+
+# 等待CUPS完全启动
+sleep 10
 
 # 自动检测并添加USB打印机
-sleep 10
-/usr/sbin/lpinfo -v | grep usb && /usr/sbin/lpadmin -p HP-LaserJet -E -v usb://HP/LaserJet%201020 -m drv:///sample.drv/generpcl.ppd 2>/dev/null
+if [ -x /usr/sbin/lpinfo ]; then
+    USB_PRINTER=$(/usr/sbin/lpinfo -v 2>/dev/null | grep -i "usb://HP" | head -n1 | awk '{print $1}')
+    
+    if [ -n "$USB_PRINTER" ]; then
+        # 检查打印机是否已添加
+        if ! /usr/sbin/lpstat -p HP-LaserJet >/dev/null 2>&1; then
+            logger -t rc.local "Adding HP LaserJet printer: $USB_PRINTER"
+            /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m everywhere 2>/dev/null || \
+            /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_PRINTER" -m drv:///sample.drv/generpcl.ppd 2>/dev/null
+            
+            # 设置为默认打印机
+            /usr/sbin/lpadmin -d HP-LaserJet 2>/dev/null
+            /usr/sbin/cupsenable HP-LaserJet 2>/dev/null
+            /usr/sbin/cupsaccept HP-LaserJet 2>/dev/null
+            
+            logger -t rc.local "HP LaserJet printer added successfully"
+        fi
+    fi
+fi
+
+# 显示系统信息
+logger -t rc.local "THDN-PrintServer initialization completed"
+logger -t rc.local "LAN IP: 192.168.10.1"
+logger -t rc.local "WiFi SSID: THDN-dayin"
 
 exit 0
+

@@ -1,42 +1,88 @@
 #!/bin/sh
 
-# USB打印机热插拔脚本
-# 当USB打印机插入时自动配置
+# USB打印机热插拔脚本 - OpenWrt 21.02
+# 支持HP LaserJet 1020/1020plus/1007/1008/1108
 
-if [ "$PRODUCT" = "3f0/2b17/100" -o "$PRODUCT" = "3f0/1017/100" -o "$PRODUCT" = "3f0/5811/100" -o "$PRODUCT" = "3f0/5c11/100" ]; then
+# HP打印机USB VID/PID列表
+# 3f0/2b17 = HP LaserJet 1020
+# 3f0/1017 = HP LaserJet 1018
+# 3f0/5811 = HP LaserJet 1007
+# 3f0/5c11 = HP LaserJet 1008
+# 3f0/3d17 = HP LaserJet 1020plus
+# 3f0/4817 = HP LaserJet 1108
+
+HP_PRINTERS="3f0/2b17 3f0/1017 3f0/5811 3f0/5c11 3f0/3d17 3f0/4817"
+
+is_hp_printer() {
+    for pid in $HP_PRINTERS; do
+        if [ "$PRODUCT" = "$pid/100" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if is_hp_printer; then
     if [ "$ACTION" = "add" ]; then
         logger -t usb-printer "HP LaserJet printer detected: $PRODUCT"
         
         # 等待设备节点创建
         sleep 3
         
+        # 设置USB设备权限
+        if [ -e /dev/usb/lp0 ]; then
+            chmod 666 /dev/usb/lp*
+            logger -t usb-printer "USB device permissions updated"
+        fi
+        
         # 检查CUPS是否运行
-        if ! /etc/init.d/cupsd status > /dev/null 2>&1; then
+        if ! pgrep cupsd > /dev/null 2>&1; then
+            logger -t usb-printer "Starting CUPS service..."
             /etc/init.d/cupsd start
             sleep 5
         fi
         
         # 查找USB打印机设备
-        USB_DEVICE=$(/usr/sbin/lpinfo -v | grep -m1 "usb://HP" | awk '{print $1}')
+        USB_DEVICE=$(/usr/sbin/lpinfo -v 2>/dev/null | grep -i "usb://HP" | head -n1 | awk '{print $1}')
         
         if [ -n "$USB_DEVICE" ]; then
             # 检查打印机是否已经添加
             if ! /usr/sbin/lpstat -p HP-LaserJet > /dev/null 2>&1; then
-                logger -t usb-printer "Adding HP LaserJet printer to CUPS"
-                /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_DEVICE" -m drv:///sample.drv/generpcl.ppd
-                /usr/sbin/lpadmin -d HP-LaserJet
-                /usr/sbin/cupsenable HP-LaserJet
-                /usr/sbin/cupsaccept HP-LaserJet
-                logger -t usb-printer "HP LaserJet printer added successfully"
+                logger -t usb-printer "Adding HP LaserJet printer: $USB_DEVICE"
+                
+                # 尝试使用IPP Everywhere驱动（推荐）
+                /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_DEVICE" -m everywhere 2>/dev/null || \
+                # 备用：使用通用PCL驱动
+                /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_DEVICE" -m drv:///sample.drv/generpcl.ppd 2>/dev/null
+                
+                # 设置为默认打印机并启用
+                /usr/sbin/lpadmin -d HP-LaserJet 2>/dev/null
+                /usr/sbin/cupsenable HP-LaserJet 2>/dev/null
+                /usr/sbin/cupsaccept HP-LaserJet 2>/dev/null
+                
+                # 设置打印机选项
+                /usr/sbin/lpadmin -p HP-LaserJet -o media=a4 2>/dev/null
+                /usr/sbin/lpadmin -p HP-LaserJet -o sides=one-sided 2>/dev/null
+                
+                logger -t usb-printer "HP LaserJet printer configured successfully"
             else
-                logger -t usb-printer "HP LaserJet printer already configured"
+                logger -t usb-printer "HP LaserJet printer already exists"
             fi
         else
-            logger -t usb-printer "USB printer device not found"
+            logger -t usb-printer "Warning: USB printer device not detected by CUPS"
         fi
-    fi
-    
-    if [ "$ACTION" = "remove" ]; then
-        logger -t usb-printer "HP LaserJet printer removed"
+        
+        # 重启P910nd服务以识别新打印机
+        if [ -f /etc/init.d/p910nd ]; then
+            /etc/init.d/p910nd restart
+            logger -t usb-printer "P910nd service restarted"
+        fi
+        
+    elif [ "$ACTION" = "remove" ]; then
+        logger -t usb-printer "HP LaserJet printer removed: $PRODUCT"
+        
+        # 可选：移除打印机配置
+        # /usr/sbin/lpadmin -x HP-LaserJet 2>/dev/null
     fi
 fi
+
