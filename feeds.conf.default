@@ -1,0 +1,14 @@
+# 使用国内镜像源加速
+src-git packages https://gitee.com/link_master/packages.git;openwrt-21.02
+src-git luci https://gitee.com/link_master/luci.git;openwrt-21.02
+src-git routing https://gitee.com/link_master/routing.git;openwrt-21.02
+src-git telephony https://gitee.com/link_master/telephony.git;openwrt-21.02
+
+# CUPS打印服务（从GitHub克隆，如访问困难可尝试手动下载）
+src-git cups https://github.com/neheb/openwrt-cups.git
+
+# 备用：Lean's LEDE源（如需使用请注释上面的gitee源）
+# src-git packages https://github.com/coolsnowwolf/packages
+# src-git luci https://github.com/coolsnowwolf/luci
+# src-git routing https://github.com/coolsnowwolf/routing
+# src-git telephony https://git.openwrt.org/feed/telephony.git

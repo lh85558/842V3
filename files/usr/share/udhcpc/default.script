@@ -1,0 +1,67 @@
+#!/bin/sh
+# udhcpc script edited by Tim Riker <Tim@Rikers.org>
+
+RESOLV_CONF="/tmp/resolv.conf.auto"
+
+[ -n "$1" ] || { echo "Error: should be called from udhcpc"; exit 1; }
+
+set_classless_routes() {
+	local max=128
+	local scheme="" routes="" route="" iface="$1"
+	while [ -n "$2" -a $max -gt 0 ]; do
+		routes="$routes $2"
+		max=$(($max-1))
+		shift
+	done
+
+	for route in $routes; do
+		local dst="${route%%/*}"
+		local gw="${route##*/}"
+		route add -net "$dst" netmask 255.255.255.255 gw "$gw" dev "$iface"
+	done
+}
+
+setup_interface() {
+	echo "Setting IP address $ip on $interface"
+	ip addr add "$ip${subnet:+/$subnet}" ${broadcast:+broadcast $broadcast} dev $interface
+	ip link set dev $interface up
+}
+
+applied=
+case "$1" in
+	deconfig)
+		ip addr flush dev $interface
+		ip link set dev $interface up
+		;;
+	renew|bound)
+		setup_interface
+
+		# setup routes
+		if [ -n "$router" ] ; then
+			echo "Deleting routes"
+			while route del default gw 0.0.0.0 dev $interface 2>/dev/null; do
+				:
+			done
+
+			metric=0
+			for i in $router ; do
+				echo "Adding router $i"
+				route add default gw $i dev $interface metric $((metric++))
+				applied=1
+			done
+		fi
+
+		# setup dns
+		echo -n > "${RESOLV_CONF}"
+		[ -n "$domain" ] && echo "search $domain" >> "${RESOLV_CONF}"
+		for i in $dns ; do
+			echo "Adding DNS $i"
+			echo "nameserver $i" >> "${RESOLV_CONF}"
+		done
+		applied=1
+		;;
+esac
+
+[ -n "$applied" ] && . /etc/rc.common /etc/init.d/* enabled
+
+exit 0

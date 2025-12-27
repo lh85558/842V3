@@ -1,0 +1,20 @@
+#!/bin/sh -e
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+# 启动CUPS服务
+/etc/init.d/cupsd enable
+/etc/init.d/cupsd start
+
+# 设置USB打印机权限
+chmod 666 /dev/usb/lp* 2>/dev/null
+
+# 启动网络打印服务
+/etc/init.d/p910nd enable
+/etc/init.d/p910nd start
+
+# 自动检测并添加USB打印机
+sleep 10
+/usr/sbin/lpinfo -v | grep usb && /usr/sbin/lpadmin -p HP-LaserJet -E -v usb://HP/LaserJet%201020 -m drv:///sample.drv/generpcl.ppd 2>/dev/null
+
+exit 0

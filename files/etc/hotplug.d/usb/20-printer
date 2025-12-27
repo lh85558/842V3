@@ -1,0 +1,42 @@
+#!/bin/sh
+
+# USB打印机热插拔脚本
+# 当USB打印机插入时自动配置
+
+if [ "$PRODUCT" = "3f0/2b17/100" -o "$PRODUCT" = "3f0/1017/100" -o "$PRODUCT" = "3f0/5811/100" -o "$PRODUCT" = "3f0/5c11/100" ]; then
+    if [ "$ACTION" = "add" ]; then
+        logger -t usb-printer "HP LaserJet printer detected: $PRODUCT"
+        
+        # 等待设备节点创建
+        sleep 3
+        
+        # 检查CUPS是否运行
+        if ! /etc/init.d/cupsd status > /dev/null 2>&1; then
+            /etc/init.d/cupsd start
+            sleep 5
+        fi
+        
+        # 查找USB打印机设备
+        USB_DEVICE=$(/usr/sbin/lpinfo -v | grep -m1 "usb://HP" | awk '{print $1}')
+        
+        if [ -n "$USB_DEVICE" ]; then
+            # 检查打印机是否已经添加
+            if ! /usr/sbin/lpstat -p HP-LaserJet > /dev/null 2>&1; then
+                logger -t usb-printer "Adding HP LaserJet printer to CUPS"
+                /usr/sbin/lpadmin -p HP-LaserJet -E -v "$USB_DEVICE" -m drv:///sample.drv/generpcl.ppd
+                /usr/sbin/lpadmin -d HP-LaserJet
+                /usr/sbin/cupsenable HP-LaserJet
+                /usr/sbin/cupsaccept HP-LaserJet
+                logger -t usb-printer "HP LaserJet printer added successfully"
+            else
+                logger -t usb-printer "HP LaserJet printer already configured"
+            fi
+        else
+            logger -t usb-printer "USB printer device not found"
+        fi
+    fi
+    
+    if [ "$ACTION" = "remove" ]; then
+        logger -t usb-printer "HP LaserJet printer removed"
+    fi
+fi
