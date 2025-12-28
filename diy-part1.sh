@@ -16,13 +16,9 @@ fi
 # 添加LuCI中文语言包支持
 echo "配置LuCI中文支持..."
 
-# 更新feeds（添加超时和重试机制）
+# 更新feeds
 echo "开始更新feeds..."
-./scripts/feeds update -a || {
-    echo "feeds更新失败，尝试重试..."
-    sleep 5
-    ./scripts/feeds update -a
-}
+./scripts/feeds update -a
 
 # 安装所有feeds
 echo "开始安装feeds..."

@@ -20,8 +20,6 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  # 使用国内镜像加速
-  USE_CHINA_MIRROR: true
 
 jobs:
   build:
@@ -54,22 +52,8 @@ jobs:
       working-directory: /workdir
       run: |
         df -hT $PWD
-        # 配置Git加速（使用GitHub代理）
-        if [ "$USE_CHINA_MIRROR" = "true" ]; then
-          echo "配置国内镜像加速..."
-          git config --global url."https://ghproxy.com/https://github.com".insteadOf "https://github.com"
-          # 或使用其他代理
-          # git config --global url."https://hub.fastgit.xyz/".insteadOf "https://github.com/"
-        fi
-        
-        # 克隆源码，增加超时和重试
-        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt || \
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
-        
+        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        
-        # 取消Git代理配置（避免影响后续操作）
-        git config --global --unset url."https://ghproxy.com/https://github.com".insteadOf || true
 
     - name: 加载自定义feeds
       run: |
@@ -97,20 +81,7 @@ jobs:
       run: |
         cd openwrt
         make defconfig
-        
-        # 使用国内镜像加速下载
-        if [ "$USE_CHINA_MIRROR" = "true" ]; then
-          echo "配置下载镜像..."
-          # 设置OpenWrt下载镜像
-          sed -i 's/downloads.openwrt.org/mirrors.tuna.tsinghua.edu.cn\/openwrt/g' scripts/download.pl
-          # 或使用中科大镜像
-          # sed -i 's/downloads.openwrt.org/mirrors.ustc.edu.cn\/openwrt/g' scripts/download.pl
-        fi
-        
-        # 下载依赖包，增加重试机制
-        make download -j8 V=s || make download -j1 V=s
-        
-        # 清理下载失败的文件
+        make download -j8 || make download -j1 V=s
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
