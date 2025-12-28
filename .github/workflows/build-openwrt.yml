@@ -84,6 +84,16 @@ jobs:
         make download -j8 || make download -j1 V=s
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+        make package/feeds/luci/lucihttp/clean V=s
+         # 1. 更新所有 feeds 源（同步最新的 luci 包源码）
+         ./scripts/feeds update -a
+
+         # 2. 重新安装所有 feeds 包（确保 lucihttp 及依赖包正确部署）
+          ./scripts/feeds install -a
+
+          # 3. 单独重新安装 lucihttp 包（针对性加固）
+           ./scripts/feeds install lucihttp
+        
 
     - name: 编译固件
       id: compile
