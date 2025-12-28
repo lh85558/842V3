@@ -7,11 +7,8 @@ echo "================================"
 echo "开始执行自定义配置 Part 1"
 echo "================================"
 
-# 添加CUPS打印服务支持
-if ! grep -q "openwrt-cups" feeds.conf.default; then
-    echo "添加CUPS软件源..."
-    echo "src-git cups https://github.com/neheb/openwrt-cups.git" >> feeds.conf.default
-fi
+# CUPS已包含在官方packages源中，无需额外添加
+echo "使用官方packages源中的CUPS..."
 
 # 添加LuCI中文语言包支持
 echo "配置LuCI中文支持..."
